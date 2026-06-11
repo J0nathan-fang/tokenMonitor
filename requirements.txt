@@ -1,0 +1,33 @@
+# TokenMonitor Dependencies
+# =========================
+
+# UI Framework
+PyQt6>=6.5.0
+PyQt6-Charts>=6.5.0
+pyqtgraph>=0.13.0
+
+# Async HTTP
+aiohttp>=3.9.0
+httpx>=0.25.0
+
+# Data & Validation
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Database
+# sqlite3 is built-in, no extra dep needed
+
+# Token Counting (fallback)
+tiktoken>=0.5.0
+
+# YAML Config
+PyYAML>=6.0
+
+# Excel Export
+openpyxl>=3.1.0
+
+# Packaging
+pyinstaller>=6.0.0
+
+# Async Qt Integration
+qasync>=0.27.0

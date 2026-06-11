@@ -1,0 +1,29 @@
+# TokenMonitor Configuration
+# ===========================
+
+proxy:
+  host: "127.0.0.1"
+  port: 7890
+
+database:
+  path: "token_monitor.db"
+
+ui:
+  theme: "dark"
+  language: "en"
+  floating_widget:
+    enabled: true
+    width: 220
+    height: 70
+    opacity: 0.85
+
+behavior:
+  startup_auto_run: false
+  close_to_tray: true
+  minimize_to_tray: true
+
+logging:
+  level: "INFO"
+  file: "token_monitor.log"
+  max_size_mb: 10
+  backup_count: 3
