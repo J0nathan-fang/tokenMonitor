@@ -33,24 +33,29 @@ class Repository:
         """Insert a new request log entry.
 
         Args:
-            data: Dict with keys: timestamp, provider, model, endpoint,
-                  input_tokens, output_tokens, total_tokens,
+            data: Dict with keys: timestamp, provider, client_type, actual_provider,
+                  model, endpoint, input_tokens, output_tokens, total_tokens,
                   cache_read_tokens, cache_write_tokens,
-                  cost, currency, latency_ms, status_code.
+                  cost, currency, pricing_version, usage_source,
+                  latency_ms, status_code.
 
         Returns:
             The new row ID.
         """
         cursor = self._db.execute(
             """INSERT INTO request_logs
-               (timestamp, provider, model, endpoint,
+               (timestamp, provider, client_type, actual_provider,
+                model, endpoint,
                 input_tokens, output_tokens, total_tokens,
                 cache_read_tokens, cache_write_tokens,
-                cost, currency, latency_ms, status_code)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                cost, currency, pricing_version, usage_source,
+                latency_ms, status_code)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 data.get("timestamp", datetime.utcnow().timestamp()),
                 data["provider"],
+                data.get("client_type", data.get("provider", "")),
+                data.get("actual_provider", data.get("provider", "")),
                 data["model"],
                 data.get("endpoint", ""),
                 data.get("input_tokens", 0),
@@ -60,6 +65,8 @@ class Repository:
                 data.get("cache_write_tokens", 0),
                 data.get("cost", 0.0),
                 data.get("currency", "USD"),
+                data.get("pricing_version", ""),
+                data.get("usage_source", "api"),
                 data.get("latency_ms", 0.0),
                 data.get("status_code", 200),
             ),
@@ -104,23 +111,27 @@ class Repository:
         """Insert or update daily aggregated stats.
 
         Args:
-            data: Dict with: date, provider, model, input_tokens,
-                  output_tokens, total_tokens, request_count, cost, currency.
+            data: Dict with: date, provider, actual_provider, model,
+                  input_tokens, output_tokens, total_tokens,
+                  request_count, cost, currency, pricing_version.
         """
         self._db.execute(
             """INSERT INTO daily_stats
-               (date, provider, model, input_tokens, output_tokens,
-                total_tokens, request_count, cost, currency)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               (date, provider, actual_provider, model,
+                input_tokens, output_tokens, total_tokens,
+                request_count, cost, currency, pricing_version)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(date, provider, model) DO UPDATE SET
                 input_tokens = input_tokens + excluded.input_tokens,
                 output_tokens = output_tokens + excluded.output_tokens,
                 total_tokens = total_tokens + excluded.total_tokens,
                 request_count = request_count + excluded.request_count,
-                cost = cost + excluded.cost""",
+                cost = cost + excluded.cost,
+                pricing_version = excluded.pricing_version""",
             (
                 data["date"],
                 data["provider"],
+                data.get("actual_provider", data.get("provider", "")),
                 data["model"],
                 data.get("input_tokens", 0),
                 data.get("output_tokens", 0),
@@ -128,6 +139,7 @@ class Repository:
                 data.get("request_count", 1),
                 data.get("cost", 0.0),
                 data.get("currency", "USD"),
+                data.get("pricing_version", ""),
             ),
         )
 
@@ -222,6 +234,36 @@ class Repository:
             (today,),
         ).fetchall()
         return [r["model"] for r in rows]
+
+    def get_top_providers_by_actual(
+        self, target_date: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Get top providers aggregated by actual_provider for a date.
+
+        Uses actual_provider for aggregation. Falls back to provider
+        if actual_provider is empty (backward compat).
+
+        Args:
+            target_date: Date string YYYY-MM-DD.
+            limit: Max number of providers to return.
+
+        Returns:
+            List of dicts with provider, total_tokens, cost, request_count.
+        """
+        rows = self._db.execute(
+            """SELECT
+                 CASE WHEN actual_provider != '' THEN actual_provider ELSE provider END
+                 as display_provider,
+                 SUM(total_tokens) as total_tokens,
+                 SUM(cost) as cost,
+                 SUM(request_count) as request_count
+               FROM daily_stats
+               WHERE date = ?
+               GROUP BY display_provider
+               ORDER BY total_tokens DESC LIMIT ?""",
+            (target_date, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     # ── Model Configs ───────────────────────────────────────────
 

@@ -25,7 +25,10 @@ class AppConfig:
 
     # Proxy
     proxy_host: str = "127.0.0.1"
-    proxy_port: int = 7890
+    proxy_port: int = 8910
+
+    # Gateway (M1+)
+    gateway_enabled: bool = True
 
     # Database
     db_path: str = "token_monitor.db"
@@ -84,7 +87,11 @@ class ConfigManager:
         # Proxy
         proxy = yaml_data.get("proxy", {})
         self._config.proxy_host = proxy.get("host", "127.0.0.1")
-        self._config.proxy_port = int(proxy.get("port", 7890))
+        self._config.proxy_port = int(proxy.get("port", 8910))
+
+        # Gateway
+        gateway = yaml_data.get("gateway", {})
+        self._config.gateway_enabled = gateway.get("enabled", True)
 
         # Database
         db = yaml_data.get("database", {})
@@ -141,6 +148,9 @@ class ConfigManager:
             "proxy": {
                 "host": self._config.proxy_host,
                 "port": self._config.proxy_port,
+            },
+            "gateway": {
+                "enabled": self._config.gateway_enabled,
             },
             "database": {
                 "path": self._config.db_path,

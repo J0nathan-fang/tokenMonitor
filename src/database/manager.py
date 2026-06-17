@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS request_logs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp       REAL NOT NULL,
     provider        TEXT NOT NULL,
+    client_type     TEXT NOT NULL DEFAULT '',
+    actual_provider TEXT NOT NULL DEFAULT '',
     model           TEXT NOT NULL,
     endpoint        TEXT,
     input_tokens    INTEGER NOT NULL DEFAULT 0,
@@ -30,6 +32,8 @@ CREATE TABLE IF NOT EXISTS request_logs (
     cache_write_tokens  INTEGER DEFAULT 0,
     cost            REAL NOT NULL DEFAULT 0.0,
     currency        TEXT NOT NULL DEFAULT 'USD',
+    pricing_version TEXT NOT NULL DEFAULT '',
+    usage_source    TEXT NOT NULL DEFAULT 'api',
     latency_ms      REAL,
     status_code     INTEGER,
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
@@ -43,6 +47,7 @@ CREATE TABLE IF NOT EXISTS daily_stats (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     date            TEXT NOT NULL,
     provider        TEXT NOT NULL,
+    actual_provider TEXT NOT NULL DEFAULT '',
     model           TEXT NOT NULL,
     input_tokens    INTEGER NOT NULL DEFAULT 0,
     output_tokens   INTEGER NOT NULL DEFAULT 0,
@@ -50,6 +55,7 @@ CREATE TABLE IF NOT EXISTS daily_stats (
     request_count   INTEGER NOT NULL DEFAULT 0,
     cost            REAL NOT NULL DEFAULT 0.0,
     currency        TEXT NOT NULL DEFAULT 'USD',
+    pricing_version TEXT NOT NULL DEFAULT '',
     UNIQUE(date, provider, model)
 );
 
@@ -93,7 +99,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Default settings
 INSERT OR IGNORE INTO settings (key, value) VALUES
-    ('proxy_port', '7890'),
+    ('proxy_port', '8910'),
     ('proxy_host', '127.0.0.1'),
     ('startup_auto_run', '0'),
     ('close_to_tray', '1'),
@@ -144,7 +150,38 @@ class DatabaseManager:
         with self._lock:
             conn = self._get_connection()
             conn.executescript(SCHEMA_SQL)
+        self._migrate_schema()
         logger.info("Database schema initialized")
+
+    def _migrate_schema(self) -> None:
+        """Safe migration — add new columns to existing tables.
+
+        Uses try/except to skip columns that already exist
+        (SQLite does not support ADD COLUMN IF NOT EXISTS).
+        """
+        migrations = [
+            # request_logs — Provider Identity + Pricing
+            "ALTER TABLE request_logs ADD COLUMN client_type TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE request_logs ADD COLUMN actual_provider TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE request_logs ADD COLUMN pricing_version TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE request_logs ADD COLUMN usage_source TEXT NOT NULL DEFAULT 'api'",
+            # daily_stats — Provider Identity + Pricing
+            "ALTER TABLE daily_stats ADD COLUMN actual_provider TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE daily_stats ADD COLUMN pricing_version TEXT NOT NULL DEFAULT ''",
+        ]
+        with self._lock:
+            conn = self._get_connection()
+            for sql in migrations:
+                try:
+                    conn.execute(sql)
+                    logger.debug("Migration: %s", sql[:60])
+                except sqlite3.OperationalError as e:
+                    # "duplicate column name" — column already exists, safe to skip
+                    err_msg = str(e).lower()
+                    if "duplicate" in err_msg or "already exists" in err_msg:
+                        logger.debug("Migration skip (exists): %s", sql[:60])
+                    else:
+                        logger.warning("Migration error: %s — %s", sql[:60], e)
 
     def execute(self, sql: str, params: tuple | None = None) -> sqlite3.Cursor:
         """Execute a parameterized SQL statement.

@@ -3,7 +3,11 @@
 
 proxy:
   host: "127.0.0.1"
-  port: 7890
+  port: 8910
+
+# Gateway mode — URL prefix routing
+gateway:
+  enabled: true
 
 database:
   path: "token_monitor.db"

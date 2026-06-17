@@ -19,6 +19,7 @@ from src.core.config import ConfigManager, AppConfig
 from src.core.event_bus import EventBus
 from src.database.manager import DatabaseManager
 from src.database.repository import Repository
+from src.services.proxy_service import ProxyServiceThread
 from src.utils.logger import setup_logging
 
 logger = logging.getLogger("token_monitor.core.app")
@@ -40,7 +41,7 @@ class Application:
         self._repository: Repository | None = None
         self._event_bus: EventBus | None = None
         self._qt_app: QApplication | None = None
-        self._proxy_server = None  # ProxyServer, set after import
+        self._proxy_thread: ProxyServiceThread | None = None
 
     def initialize(self) -> AppConfig:
         """Initialize all subsystems in order.
@@ -113,6 +114,8 @@ class Application:
             # DeepSeek
             ("deepseek", "deepseek-chat", "DeepSeek Chat", "https://api.deepseek.com/v1", 0.27, 1.10),
             ("deepseek", "deepseek-reasoner", "DeepSeek Reasoner", "https://api.deepseek.com/v1", 0.55, 2.19),
+            ("deepseek", "deepseek-v4-flash", "DeepSeek V4 Flash", "https://api.deepseek.com/v1", 0.27, 1.10),
+            ("deepseek", "deepseek-v4-pro", "DeepSeek V4 Pro", "https://api.deepseek.com/v1", 0.55, 2.19),
             # OpenRouter
             ("openrouter", "openrouter", "OpenRouter (default)", "https://openrouter.ai/api/v1", 0.0, 0.0),
         ]
@@ -147,6 +150,21 @@ class Application:
         )
         self._main_window.show()
 
+        # Start Gateway proxy server
+        self._proxy_thread = ProxyServiceThread(
+            config=self._config,
+            repository=self._repository,
+            event_bus=self._event_bus,
+        )
+        self._proxy_thread.started_signal.connect(
+            lambda: logger.info("Gateway proxy server ready on %s:%d",
+                                self._config.proxy_host, self._config.proxy_port)
+        )
+        self._proxy_thread.error_signal.connect(
+            lambda msg: logger.error("Proxy server error: %s", msg)
+        )
+        self._proxy_thread.start()
+
         # Setup signal handling for graceful shutdown
         signal.signal(signal.SIGINT, lambda *a: self._qt_app.quit())
         # Windows: timer to allow Python signal handler to run
@@ -165,11 +183,11 @@ class Application:
         logger.info("Shutting down...")
 
         # Stop proxy if running
-        if self._proxy_server is not None:
+        if self._proxy_thread is not None:
             try:
-                loop = asyncio.new_event_loop()
-                loop.run_until_complete(self._proxy_server.stop())
-                loop.close()
+                self._proxy_thread.stop()
+                self._proxy_thread.quit()
+                self._proxy_thread.wait(5000)
             except Exception as e:
                 logger.warning("Error stopping proxy: %s", e)
 

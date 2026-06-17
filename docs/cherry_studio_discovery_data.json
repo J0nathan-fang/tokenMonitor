@@ -1,0 +1,147 @@
+[
+  {
+    "#": 1,
+    "timestamp": "2026-06-16T23:31:12.400885Z",
+    "method": "POST",
+    "path": "/openai/v1/chat/completions",
+    "query_string": "",
+    "headers": {
+      "Host": "127.0.0.1:8911",
+      "Connection": "keep-alive",
+      "Content-Length": "3631",
+      "sec-ch-ua-platform": "\"Windows\"",
+      "Authorization": "Bearer sk-t***test",
+      "sec-ch-ua": "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\"",
+      "sec-ch-ua-mobile": "?0",
+      "x-title": "Cherry Studio",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.8.0 Chrome/144.0.7559.236 Electron/40.8.0 Safari/537.36",
+      "http-referer": "https://cherry-ai.com",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Sec-Fetch-Site": "cross-site",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Dest": "empty",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "zh-CN"
+    },
+    "body_shape": {
+      "model": "deepseek-v4-flash",
+      "messages_count": 1,
+      "first_message_role": "user"
+    },
+    "direct_target_path": "/v1/chat/completions",
+    "gateway_status": 200,
+    "latency_ms": 1946.4
+  },
+  {
+    "#": 2,
+    "timestamp": "2026-06-16T23:31:14.352737Z",
+    "method": "POST",
+    "path": "/openai/v1/chat/completions",
+    "query_string": "",
+    "headers": {
+      "Host": "127.0.0.1:8911",
+      "Connection": "keep-alive",
+      "Content-Length": "228",
+      "sec-ch-ua-platform": "\"Windows\"",
+      "Authorization": "Bearer sk-t***test",
+      "sec-ch-ua": "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\"",
+      "sec-ch-ua-mobile": "?0",
+      "x-title": "Cherry Studio",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.8.0 Chrome/144.0.7559.236 Electron/40.8.0 Safari/537.36",
+      "http-referer": "https://cherry-ai.com",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Sec-Fetch-Site": "cross-site",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Dest": "empty",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "zh-CN"
+    },
+    "body_shape": {
+      "model": "deepseek-v4-flash",
+      "messages_count": 4,
+      "first_message_role": "user",
+      "last_message_role": "user",
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "direct_target_path": "/v1/chat/completions",
+    "gateway_status": 200,
+    "latency_ms": 1712.6,
+    "stream_chunks": 32,
+    "stream_bytes": 30451
+  },
+  {
+    "#": 3,
+    "timestamp": "2026-06-16T23:31:36.843083Z",
+    "method": "POST",
+    "path": "/openai/v1/chat/completions",
+    "query_string": "",
+    "headers": {
+      "Host": "127.0.0.1:8911",
+      "Connection": "keep-alive",
+      "Content-Length": "3732",
+      "sec-ch-ua-platform": "\"Windows\"",
+      "Authorization": "Bearer sk-t***test",
+      "sec-ch-ua": "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\"",
+      "sec-ch-ua-mobile": "?0",
+      "x-title": "Cherry Studio",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.8.0 Chrome/144.0.7559.236 Electron/40.8.0 Safari/537.36",
+      "http-referer": "https://cherry-ai.com",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Sec-Fetch-Site": "cross-site",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Dest": "empty",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "zh-CN"
+    },
+    "body_shape": {
+      "model": "deepseek-v4-flash",
+      "messages_count": 1,
+      "first_message_role": "user"
+    },
+    "direct_target_path": "/v1/chat/completions",
+    "gateway_status": 200,
+    "latency_ms": 2441.2
+  },
+  {
+    "#": 4,
+    "timestamp": "2026-06-16T23:31:39.293561Z",
+    "method": "POST",
+    "path": "/openai/v1/chat/completions",
+    "query_string": "",
+    "headers": {
+      "Host": "127.0.0.1:8911",
+      "Connection": "keep-alive",
+      "Content-Length": "695",
+      "sec-ch-ua-platform": "\"Windows\"",
+      "Authorization": "Bearer sk-t***test",
+      "sec-ch-ua": "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\"",
+      "sec-ch-ua-mobile": "?0",
+      "x-title": "Cherry Studio",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.8.0 Chrome/144.0.7559.236 Electron/40.8.0 Safari/537.36",
+      "http-referer": "https://cherry-ai.com",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Sec-Fetch-Site": "cross-site",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Dest": "empty",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "zh-CN"
+    },
+    "body_shape": {
+      "model": "deepseek-v4-flash",
+      "messages_count": 5,
+      "first_message_role": "user",
+      "last_message_role": "user",
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    }
+  }
+]

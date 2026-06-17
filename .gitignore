@@ -30,3 +30,7 @@ Thumbs.db
 
 # Environment
 .env
+
+# Security — generated test artifacts (may contain keys)
+tests/integration/*_data.json
+deepseek_validation_data.json

@@ -22,6 +22,12 @@ class UsageData:
     """Standardized usage data extracted from an API response.
 
     All parsers return this dataclass regardless of the original API format.
+
+    Provider Identity Separation:
+    - client_type: SDK/Protocol used (e.g. "openai", "anthropic")
+    - actual_provider: Real backend API provider (e.g. "deepseek", "openai")
+    - usage_source: "api" (from response) or "token_counter_fallback" (estimated)
+    - pricing_version: Pricing snapshot identifier (e.g. "2026-06-deepseek")
     """
 
     provider: str
@@ -35,6 +41,13 @@ class UsageData:
     endpoint: str = ""
     status_code: int = 200
     timestamp: float = field(default_factory=time.time)
+    # Provider Identity
+    client_type: str = ""
+    actual_provider: str = ""
+    # Usage source tracking
+    usage_source: str = "api"  # "api" | "token_counter_fallback"
+    # Pricing version for audit trail
+    pricing_version: str = ""
 
     @property
     def is_valid(self) -> bool:
@@ -46,6 +59,8 @@ class UsageData:
         return {
             "timestamp": self.timestamp,
             "provider": self.provider,
+            "client_type": self.client_type or self.provider,
+            "actual_provider": self.actual_provider or self.provider,
             "model": self.model,
             "endpoint": self.endpoint,
             "input_tokens": self.input_tokens,
@@ -57,6 +72,8 @@ class UsageData:
             "status_code": self.status_code,
             "cost": 0.0,  # Filled by CostCalculator
             "currency": "USD",
+            "pricing_version": self.pricing_version,
+            "usage_source": self.usage_source,
         }
 
 

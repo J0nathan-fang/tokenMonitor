@@ -14,7 +14,9 @@ from aiohttp import web
 
 from src.core.event_bus import EventBus
 from src.parser.registry import ParserRegistry
+from src.proxy.endpoint_resolver import EndpointResolver
 from src.proxy.handler import ProxyHandler
+from src.proxy.provider_router import ProviderRouter
 from src.statistics.calculator import CostCalculator
 from src.statistics.engine import StatisticsEngine
 from src.database.repository import Repository
@@ -44,24 +46,29 @@ AI_API_PATTERNS = [
 
 
 class ProxyServer:
-    """Local HTTP proxy server that intercepts AI API calls.
+    """Unified HTTP Server — 同时支持 Gateway 模式和 Proxy 模式。
 
-    Transparently forwards requests while extracting token usage data.
-    Does NOT modify requests or responses — acts as a transparent monitor.
+    在同一端口上处理两种请求格式:
+    - Gateway: URL 以 /openai/、/anthropic/ 等前缀开头
+    - Proxy: URL 为完整真实 API 地址（通过 HTTP 代理发送）
+
+    Gateway 模式下，通过 ProviderRouter 识别 Provider，
+    PathAdapter 归一化路径，EndpointResolver 解析目标 URL，
+    然后将请求转发给 ProxyHandler 处理。
     """
 
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: int = 7890,
+        port: int = 8910,
         repository: Repository | None = None,
         event_bus: EventBus | None = None,
     ) -> None:
-        """Initialize the proxy server.
+        """Initialize the unified server.
 
         Args:
             host: Bind address.
-            port: Bind port.
+            port: Bind port (default 8910 for Gateway mode).
             repository: Repository for database access.
             event_bus: Event bus for real-time updates.
         """
@@ -70,7 +77,11 @@ class ProxyServer:
         self._repository = repository
         self._event_bus = event_bus or EventBus.get_instance()
 
-        # Initialize components
+        # Gateway 组件
+        self._router = ProviderRouter()
+        self._resolver = EndpointResolver()
+
+        # 数据处理组件
         self._parser_registry = ParserRegistry()
         self._calculator = CostCalculator(repository) if repository else None
         self._engine = StatisticsEngine(repository, self._calculator) if repository else None
@@ -122,10 +133,12 @@ class ProxyServer:
         return False
 
     async def _handle_all(self, request: web.Request) -> web.StreamResponse:
-        """Handle all incoming proxy requests.
+        """Handle all incoming requests — Gateway + Proxy 统一入口。
 
-        Routes AI API requests through the handler for parsing.
-        Forwards non-AI requests directly (generic proxy behavior).
+        分流逻辑:
+        1. 路径匹配 Gateway 前缀 → Gateway 处理
+        2. URL 匹配 AI API 模式 → Proxy 处理（透明代理）
+        3. 其他 → 通用转发
 
         Args:
             request: The incoming aiohttp Request.
@@ -133,14 +146,114 @@ class ProxyServer:
         Returns:
             A StreamResponse.
         """
-        url = str(request.url)
-        headers = dict(request.headers)
+        path = request.path
 
+        # 优先检测 Gateway 请求（不需要构建 url，避免 Host:port 解析失败）
+        if self._router.is_gateway_request(path):
+            return await self._handle_gateway(request)
+
+        # 以下为 Proxy 模式 — 需要完整 URL
+        headers = dict(request.headers)
+        raw_url = request.headers.get("Host", "") or request.host
+        try:
+            url = str(request.url)
+        except (ValueError, AttributeError):
+            # yarl URL build 可能因 Host:port 格式失败 — 手动构建
+            scheme = "https" if request.secure else "http"
+            url = f"{scheme}://{raw_url}{path}"
+            if request.query_string:
+                url += "?" + request.query_string
+
+        # 检测 Proxy 模式的 AI API 请求
         if self._is_ai_api_request(url, headers) and self._handler:
             return await self._handler.handle_request(request)
-        else:
-            # Generic forward for non-AI requests
-            return await self._generic_forward(request)
+
+        # 其他请求 — 通用转发
+        return await self._generic_forward(request)
+
+    async def _handle_gateway(self, request: web.Request) -> web.StreamResponse:
+        """Handle Gateway mode requests.
+
+        流程:
+        1. ProviderRouter 解析路径 → client_type + 归一化 target_path
+        2. EndpointResolver 构建目标 URL + 获取 Auth Headers + Provider Identity
+        3. 委托 ProxyHandler 转发并解析
+
+        Provider Identity:
+        - client_type = Router 检测到的协议类型（如 "openai"）
+        - actual_provider = EndpointResolver 中的真实后端（如 "deepseek"）
+
+        Args:
+            request: The incoming aiohttp Request.
+
+        Returns:
+            A StreamResponse.
+        """
+        path = request.path
+        query_string = str(request.query_string) if request.query_string else ""
+        full_path = path + ("?" + query_string if query_string else "")
+
+        # 1. 解析路由 → client_type
+        route_result = self._router.resolve_and_normalize(full_path)
+        if route_result is None or not route_result.matched:
+            logger.warning("Gateway: unknown route '%s'", full_path)
+            return web.Response(status=404, text="Unknown provider")
+
+        client_type = route_result.provider
+
+        # 2. 获取 EndpointConfig（含 actual_provider, pricing_version）
+        endpoint_config = self._resolver.resolve(client_type)
+        if endpoint_config is None:
+            logger.error(
+                "Gateway: no endpoint config for client_type '%s'",
+                client_type,
+            )
+            return web.Response(status=502, text="Provider not configured")
+
+        actual_provider = endpoint_config.actual_provider
+        pricing_version = endpoint_config.pricing_version
+
+        # 3. 构建目标 URL
+        target_url = self._resolver.build_target_url(
+            client_type,
+            route_result.target_path,
+        )
+        if target_url is None:
+            logger.error(
+                "Gateway: failed to build target URL for '%s'",
+                client_type,
+            )
+            return web.Response(status=502, text="Provider not configured")
+
+        # 4. 获取 Auth Headers（透传模式）
+        client_headers = dict(request.headers)
+        auth_value = (
+            client_headers.get("Authorization")
+            or client_headers.get("authorization")
+            or client_headers.get("x-api-key")
+            or client_headers.get("X-Api-Key")
+            or None
+        )
+        override_headers = self._resolver.get_api_key_headers(
+            client_type,
+            auth_value,
+        )
+
+        logger.info(
+            "Gateway: %s %s → client_type=%s, actual=%s, target=%s",
+            request.method, full_path,
+            client_type, actual_provider, target_url,
+        )
+
+        # 5. 委托 Handler — 传递 Provider Identity
+        return await self._handler.handle_request(
+            request,
+            target_url=target_url,
+            override_headers=override_headers,
+            client_type=client_type,
+            actual_provider=actual_provider,
+            pricing_version=pricing_version,
+        )
 
     async def _generic_forward(self, request: web.Request) -> web.StreamResponse:
         """Generic forward for non-AI requests (basic proxy).

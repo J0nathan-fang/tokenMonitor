@@ -83,20 +83,25 @@ class StatisticsEngine:
         log_entry = usage.to_dict()
         log_entry["cost"] = cost_result.total_cost
         log_entry["currency"] = cost_result.currency
+        log_entry["pricing_version"] = usage.pricing_version
+        log_entry["usage_source"] = usage.usage_source
 
         # Insert request log
         try:
             self._repository.insert_request_log(log_entry)
-            logger.debug("Request log inserted: %s/%s", usage.provider, usage.model)
+            logger.debug("Request log inserted: %s/%s (actual=%s)",
+                        usage.provider, usage.model, usage.actual_provider)
         except Exception as e:
             logger.error("Failed to insert request log: %s", e, exc_info=True)
 
         # Update daily stats
         today = date.today().isoformat()
+        actual_provider = usage.actual_provider or usage.provider
         try:
             self._repository.upsert_daily_stats({
                 "date": today,
                 "provider": usage.provider,
+                "actual_provider": actual_provider,
                 "model": usage.model,
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
@@ -104,6 +109,7 @@ class StatisticsEngine:
                 "request_count": 1,
                 "cost": cost_result.total_cost,
                 "currency": cost_result.currency,
+                "pricing_version": usage.pricing_version,
             })
         except Exception as e:
             logger.error("Failed to upsert daily stats: %s", e, exc_info=True)
@@ -146,12 +152,13 @@ class StatisticsEngine:
         # Active models today
         active_models = list({r["model"] for r in today_rows})
 
-        # Top models today
+        # Top models today (uses actual_provider for display)
         top_models = sorted(today_rows, key=lambda r: r["total_tokens"], reverse=True)[:5]
         top_models_list = [
             {
                 "model": r["model"],
-                "provider": r["provider"],
+                "provider": r.get("actual_provider") or r["provider"],
+                "client_type": r["provider"],
                 "total_tokens": r["total_tokens"],
                 "cost": r["cost"],
             }

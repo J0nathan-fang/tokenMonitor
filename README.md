@@ -6,6 +6,38 @@ AI Token 使用监控与费用分析工具 — Windows 桌面应用。
 
 ---
 
+## 环境配置
+
+### API Keys
+
+TokenMonitor 通过环境变量读取 API Keys。复制 `.env.example` 为 `.env` 并填入你的密钥：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 文件：
+
+```env
+DEEPSEEK_API_KEY=sk-your-key-here
+OPENAI_API_KEY=sk-your-key-here
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+```
+
+支持的环境变量：
+
+| 变量 | Provider | 获取地址 |
+|------|----------|---------|
+| `DEEPSEEK_API_KEY` | DeepSeek | https://platform.deepseek.com/api_keys |
+| `OPENAI_API_KEY` | OpenAI | https://platform.openai.com/api-keys |
+| `ANTHROPIC_API_KEY` | Anthropic | https://console.anthropic.com/settings/keys |
+| `GEMINI_API_KEY` | Gemini | https://aistudio.google.com/app/apikey |
+| `OPENROUTER_API_KEY` | OpenRouter | https://openrouter.ai/keys |
+
+> ⚠️ `.env` 文件已在 `.gitignore` 中排除，不会提交到 Git。不要将 API Keys 硬编码到代码中。
+
+---
+
 ## 启动与退出
 
 ### 启动
@@ -80,27 +112,27 @@ python -m src.main
 
 ## 配置客户端代理
 
-将 AI 客户端的 HTTP 代理设置为 `http://127.0.0.1:7890`。
+将 AI 客户端的 HTTP 代理设置为 `http://127.0.0.1:8910`。
 
 ### Cherry Studio
-设置 → 网络 → 代理 → HTTP 代理：`http://127.0.0.1:7890`
+设置 → 网络 → 代理 → HTTP 代理：`http://127.0.0.1:8910`
 
 ### Claude Code
 ```bash
-set HTTP_PROXY=http://127.0.0.1:7890
-set HTTPS_PROXY=http://127.0.0.1:7890
+set HTTP_PROXY=http://127.0.0.1:8910
+set HTTPS_PROXY=http://127.0.0.1:8910
 ```
 
 ### Cursor / VSCode
-设置 → 搜索 "proxy" → 填入 `http://127.0.0.1:7890`
+设置 → 搜索 "proxy" → 填入 `http://127.0.0.1:8910`
 
 ### Continue
-在 `config.json` 中添加：`"proxy": "http://127.0.0.1:7890"`
+在 `config.json` 中添加：`"proxy": "http://127.0.0.1:8910"`
 
 ### Open WebUI
 启动时添加环境变量：
 ```bash
-set OPENAI_API_BASE=http://127.0.0.1:7890/v1
+set OPENAI_API_BASE=http://127.0.0.1:8910/openai/v1
 ```
 
 ---
@@ -108,9 +140,10 @@ set OPENAI_API_BASE=http://127.0.0.1:7890/v1
 ## 项目架构
 
 ```
-AI 客户端 → 本地代理(127.0.0.1:7890) → 真实API → 解析Usage → SQLite → UI刷新
-                                   ↓
-                             原样转发响应（不修改任何数据）
+AI 客户端 → Gateway(127.0.0.1:8910) → Router/EndpointResolver → 真实API → 解析Usage → SQLite → UI刷新
+                                        ↓
+                                  Provider Identity 分离
+                                  (client_type vs actual_provider)
 ```
 
 ### 目录结构
@@ -120,7 +153,7 @@ tokenMonitor/
 ├── src/
 │   ├── main.py                 # 程序入口
 │   ├── core/                   # 核心：配置、事件总线、启动引导
-│   ├── proxy/                  # HTTP 代理服务器
+│   ├── proxy/                  # Gateway 服务器、Router、EndpointResolver
 │   ├── parser/                 # Usage 解析器（各 Provider）
 │   ├── statistics/             # 统计引擎、费用计算
 │   ├── database/               # SQLite 数据库层
@@ -133,8 +166,11 @@ tokenMonitor/
 │   │   ├── settings/           # 系统设置
 │   │   └── widgets/            # 可复用组件
 │   └── utils/                  # 工具：日志、Token计数、国际化
-├── tests/                      # 单元测试（34个）
+├── tests/                      # 测试（集成 + 单元）
+├── tools/                      # 诊断工具（Path Discovery）
+├── docs/                       # 架构、兼容性、验证报告
 ├── config.yaml                 # 配置文件
+├── .env.example                # 环境变量模板
 ├── requirements.txt            # Python 依赖
 └── token_monitor.spec          # PyInstaller 打包配置
 ```

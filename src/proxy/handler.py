@@ -52,23 +52,58 @@ class ProxyHandler:
         self._forwarder = RequestForwarder()
         self._sse_handler = SSEHandler(parser_registry)
 
-    async def handle_request(self, request: Request) -> web.StreamResponse:
-        """Handle an incoming proxy request.
+    async def handle_request(
+        self,
+        request: Request,
+        target_url: str | None = None,
+        override_headers: dict[str, str] | None = None,
+        client_type: str = "",
+        actual_provider: str = "",
+        pricing_version: str = "",
+    ) -> web.StreamResponse:
+        """Handle an incoming proxy or gateway request.
 
         This is the main entry point called by the proxy server.
 
         Args:
             request: The aiohttp Request object.
+            target_url: (Gateway mode) Override the upstream URL. If None,
+                        uses the original request URL (Proxy mode).
+            override_headers: (Gateway mode) Headers to override/add before
+                              forwarding. Used for Auth header transformation.
+            client_type: SDK/Protocol type (e.g. "openai").
+            actual_provider: Real backend API provider (e.g. "deepseek").
+            pricing_version: Pricing snapshot identifier.
 
         Returns:
             A StreamResponse to send back to the client.
         """
         # Read request body
         request_body = await request.read()
-        url = str(request.url)
+        url = target_url if target_url else str(request.url)
         headers = dict(request.headers)
 
-        logger.debug("Proxy request: %s %s", request.method, url)
+        # Merge override headers (Gateway mode auth transformation)
+        if override_headers:
+            headers.update(override_headers)
+            logger.debug("Gateway: merged %d override headers", len(override_headers))
+
+        # Provider Identity — attached to request for parser/pipeline use
+        # Stored as request attributes for downstream access
+        request["client_type"] = client_type
+        request["actual_provider"] = actual_provider
+        request["pricing_version"] = pricing_version
+
+        logger.debug("Handler request: %s %s (client=%s, actual=%s)",
+                     request.method, url, client_type, actual_provider)
+
+        # Determine usage source — check stream_options.include_usage
+        request["usage_source"] = self._determine_usage_source(request_body)
+        if request["usage_source"] == "token_counter_fallback":
+            logger.warning(
+                "[Streaming Fallback] stream=true without include_usage "
+                "— Usage unavailable in stream response"
+            )
 
         # Detect if this is a streaming request
         is_streaming = self._is_stream_request(request_body, headers)
@@ -77,6 +112,33 @@ class ProxyHandler:
             return await self._handle_stream(request, url, headers, request_body)
         else:
             return await self._handle_regular(request, url, headers, request_body)
+
+    @staticmethod
+    def _determine_usage_source(body: bytes) -> str:
+        """Determine the usage source for a request.
+
+        Checks stream_options.include_usage flag.
+
+        Args:
+            body: Request body bytes.
+
+        Returns:
+            "api" if usage will come from API response,
+            "token_counter_fallback" if streaming without include_usage.
+        """
+        if not body:
+            return "api"
+        import json
+        try:
+            req = json.loads(body)
+            if req.get("stream", False):
+                stream_options = req.get("stream_options", {})
+                if isinstance(stream_options, dict):
+                    if not stream_options.get("include_usage", False):
+                        return "token_counter_fallback"
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+        return "api"
 
     async def _handle_regular(
         self,
@@ -124,6 +186,11 @@ class ProxyHandler:
         if usage:
             usage.latency_ms = latency_ms + parse_latency
             usage.endpoint = url
+            # Inject Provider Identity from Gateway metadata
+            usage.client_type = request.get("client_type", "")
+            usage.actual_provider = request.get("actual_provider", "")
+            usage.pricing_version = request.get("pricing_version", "")
+            usage.usage_source = request.get("usage_source", "api")
 
         # Record statistics
         if usage and usage.is_valid:
@@ -205,6 +272,11 @@ class ProxyHandler:
             usage = relay_iter.usage
             if usage and usage.is_valid:
                 usage.endpoint = url
+                # Inject Provider Identity from Gateway metadata
+                usage.client_type = request.get("client_type", "")
+                usage.actual_provider = request.get("actual_provider", "")
+                usage.pricing_version = request.get("pricing_version", "")
+                usage.usage_source = request.get("usage_source", "api")
                 try:
                     self._engine.record(usage)
                 except Exception as e:
@@ -215,6 +287,9 @@ class ProxyHandler:
 
     def _is_stream_request(self, body: bytes, headers: dict[str, str]) -> bool:
         """Detect if a request is asking for streaming.
+
+        Also checks for stream_options.include_usage and sets
+        usage_source on the request object for downstream pipeline use.
 
         Args:
             body: Request body bytes.
@@ -229,6 +304,15 @@ class ProxyHandler:
             try:
                 req = json.loads(body)
                 if req.get("stream", False):
+                    # Streaming Usage Fallback detection
+                    stream_options = req.get("stream_options", {})
+                    include_usage = stream_options.get("include_usage", False) if isinstance(stream_options, dict) else False
+                    if not include_usage:
+                        logger.warning(
+                            "[Streaming Fallback] stream=true but stream_options.include_usage "
+                            "not set — Usage unavailable in stream response, "
+                            "TokenCounter fallback will be used"
+                        )
                     return True
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
