@@ -4,7 +4,8 @@ AI Token 使用监控与费用分析工具 — Windows 桌面应用。
 
 实时统计和分析电脑上所有 AI 客户端的 Token 消耗、费用、模型使用情况。
 
-本项目还不成熟，目前只完成了DS再cherry studio上的适配
+本项目还不成熟，目前只完成了DS在cherry studio上的适配
+
 ---
 
 ## 环境配置
