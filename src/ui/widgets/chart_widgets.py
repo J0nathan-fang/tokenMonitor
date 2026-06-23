@@ -174,7 +174,11 @@ class PieChartWidget(QWidget):
 
 
 class ModelDistributionChart(QWidget):
-    """Alternative: Use a horizontal bar chart for model distribution."""
+    """Horizontal bar chart for model token distribution.
+
+    Y-axis: model IDs (top → bottom = highest → lowest token count).
+    X-axis: token consumption as horizontal bar length.
+    """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the distribution chart.
@@ -195,24 +199,39 @@ class ModelDistributionChart(QWidget):
         layout.addWidget(self._plot)
 
     def plot(self, labels: list[str], values: list[float]) -> None:
-        """Plot horizontal bars showing model token distribution.
+        """Plot horizontal bars — model names on Y, token counts on X.
+
+        Bars are sorted so the model with the most tokens appears at
+        the top of the Y axis.
 
         Args:
-            labels: Model names.
-            values: Token counts.
+            labels: Model names (already sorted desc by token count).
+            values: Token counts (same order as labels).
         """
         self._plot.clear()
+
+        if not labels or not values:
+            return
+
         colors = ["#58a6ff", "#3fb950", "#d2991d", "#f85149", "#a371f7", "#39c5cf"]
 
+        # Y positions: 0 = top bar, N-1 = bottom bar
         y = list(range(len(labels)))
-        bars = pg.BarGraphItem(
+
+        # Horizontal bars — width extends right by token count, height is bar thickness
+        bar = pg.BarGraphItem(
             x0=[0] * len(values),
             y=y,
-            width=0.6,
-            height=values,
+            width=values,
+            height=0.6,
             brushes=[colors[i % len(colors)] for i in range(len(labels))],
         )
-        self._plot.addItem(bars)
+        self._plot.addItem(bar)
 
+        # Y-axis: model names, highest-token model at top
         ticks = [(i, label) for i, label in enumerate(labels)]
         self._plot.getPlotItem().getAxis("left").setTicks([ticks])
+        self._plot.getPlotItem().invertY(True)
+
+        # Fit all bars in view
+        self._plot.setYRange(-0.8, len(labels) - 0.2)

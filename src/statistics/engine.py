@@ -114,6 +114,15 @@ class StatisticsEngine:
         except Exception as e:
             logger.error("Failed to upsert daily stats: %s", e, exc_info=True)
 
+        # Emit real-time events to UI
+        try:
+            from src.core.event_bus import EventBus
+            bus = EventBus.get_instance()
+            bus.new_request.emit(log_entry)
+            bus.stats_updated.emit()
+        except Exception as e:
+            logger.debug("EventBus emit skipped: %s", e)
+
         # Return updated summary
         return self.get_summary()
 

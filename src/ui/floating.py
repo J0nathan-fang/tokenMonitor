@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from PyQt6.QtCore import Qt, QPoint, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QEvent, QPoint, QTimer, pyqtSignal
 from PyQt6.QtGui import QMouseEvent, QAction, QColor
 from PyQt6.QtWidgets import (
     QApplication,
@@ -83,6 +83,9 @@ class FloatingWidget(QFrame):
         if screen:
             geo = screen.availableGeometry()
             self.move(geo.right() - 280, geo.top() + 20)
+
+        # Initial data load (don't wait for first timer tick)
+        self.refresh()
 
         logger.info("Floating widget created")
 
@@ -154,6 +157,11 @@ class FloatingWidget(QFrame):
         effect.setOpacity(0.88)
         self.setGraphicsEffect(effect)
 
+        # Forward mouse events from child widget so drag works.
+        # The _container fills the entire FloatingWidget area, so mouse
+        # events never reach the parent widget's mousePressEvent etc.
+        self._container.installEventFilter(self)
+
     def _apply_expanded_style(self, expanded: bool) -> None:
         """Update widget size and style for expanded/collapsed state.
 
@@ -176,6 +184,28 @@ class FloatingWidget(QFrame):
         """)
 
     # ── Mouse Events ────────────────────────────
+
+    def eventFilter(self, obj: QWidget, event: QEvent) -> bool:
+        """Filter events from _container child widget.
+
+        The _container covers the entire FloatingWidget area, so mouse
+        events never reach the parent's mousePressEvent / mouseMoveEvent /
+        mouseReleaseEvent.  By intercepting them here and calling the
+        parent's own handlers, dragging works regardless of which child
+        widget is under the cursor.
+        """
+        if obj is self._container:
+            etype = event.type()
+            if etype == QEvent.Type.MouseButtonPress:
+                self.mousePressEvent(event)
+                return True
+            if etype == QEvent.Type.MouseMove:
+                self.mouseMoveEvent(event)
+                return True
+            if etype == QEvent.Type.MouseButtonRelease:
+                self.mouseReleaseEvent(event)
+                return True
+        return super().eventFilter(obj, event)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press for drag and click."""
@@ -236,12 +266,15 @@ class FloatingWidget(QFrame):
     # ── Data Refresh ────────────────────────────
 
     def refresh(self) -> None:
-        """Refresh the displayed statistics."""
+        """Refresh the displayed statistics.
+
+        Uses get_summary() (always queries DB) instead of last_summary
+        (cached forever) so data stays current after each new request.
+        """
         try:
-            summary = self._stats.last_summary
-            if summary is None:
-                summary = self._stats.get_summary()
-        except Exception:
+            summary = self._stats.get_summary()
+        except Exception as e:
+            logger.warning("FloatingWidget refresh failed: %s", e)
             return
 
         # Active model
